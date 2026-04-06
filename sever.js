@@ -236,8 +236,8 @@ app.post('/webhook', async (req, res) => {
       } else {
         await replyFlex(event.replyToken, `Container: ${search.value}`, buildContainerFlex(item));
       }
-      return res.sendStatus(200);
-    }
+      return res.json({intent: 'container',type: 'flex'});
+      }
 
     // ---- BOOKING ----
     if (search.type === 'booking') {
@@ -248,7 +248,7 @@ app.post('/webhook', async (req, res) => {
       } else {
         await replyFlex(event.replyToken, `Booking: ${search.value}`, buildBookingFlex(item));
       }
-      return res.sendStatus(200);
+      return res.json({intent: 'booking',type: 'flex'});
     }
 
     // ---- VESSEL ----
@@ -260,7 +260,7 @@ app.post('/webhook', async (req, res) => {
       } else {
         await replyFlex(event.replyToken, `Vessel: ${search.value}`, buildVesselFlex(item));
       }
-      return res.sendStatus(200);
+      return res.json({intent: 'vessel',type: 'flex'});
     }
 
     // ---- DIALOGFLOW EN ----
@@ -270,7 +270,11 @@ app.post('/webhook', async (req, res) => {
     );
     if (cluResult.intentDetectionConfidence >= 0.6 && cluResult.fulfillmentText && !isFallback(cluResult)) {
       await replyText(event.replyToken, cluResult.fulfillmentText);
-      return res.sendStatus(200);
+      return res.json({
+        intent: cluResult.intent?.displayName,
+        confidence: cluResult.intentDetectionConfidence,
+        type: 'dialogflow'
+      });
     }
 
     // ---- DIALOGFLOW FAQ TH ----
@@ -279,8 +283,15 @@ app.post('/webhook', async (req, res) => {
       originalText, sessionId, "th"
     );
     const faqAnswer = faqResult.fulfillmentText || "ไม่พบข้อมูลที่เกี่ยวข้อง";
+    const isFaqFallback = isFallback(faqResult);
+
     await replyText(event.replyToken, faqAnswer);
-    return res.sendStatus(200);
+
+    return res.json({
+      intent: faqResult.intent?.displayName || 'unknown',
+      confidence: faqResult.intentDetectionConfidence || 0,
+      type: isFaqFallback ? 'fallback' : 'dialogflow'
+    });
 
   } catch (err) {
     logError(err);
