@@ -75,7 +75,10 @@ function detectSearchType(text) {
 
   // Container: 4 ตัวอักษร + 7 ตัวเลข
   const containerMatch = upper.match(/\b([A-Z]{4}\s*[0-9]{6}\s*[0-9])\b/);
-  if (containerMatch) return { type: 'container', value: containerMatch[1] };
+  if (containerMatch) {
+    const clean = containerMatch[1].replace(/\s+/g, '');
+    return { type: 'container', value: clean };
+  }
 
   // Vessel: "เรือ xxx" หรือ "vessel xxx" (มี prefix)
   if (/^(เรือ|vessel)\s+/i.test(text.trim())) {
