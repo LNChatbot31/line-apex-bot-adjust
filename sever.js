@@ -4,7 +4,6 @@ const axios = require('axios');
 const { GoogleAuth } = require('google-auth-library');
 
 // ดึง Flex Card ทั้งหมดจาก flexCards.js
-// ถ้าอยากเพิ่มการ์ดใหม่ → ไปแก้ที่ flexCards.js
 const {
   buildContainerFlex,
   buildBookingFlex,
@@ -15,7 +14,8 @@ const {
 const app = express();
 app.use(express.json());
 
-const APEX_BASE = 'https://uatonline.hutchisonports.co.th/hptuat/api/linebot';
+const APEX_BASE    = 'https://uatonline.hutchisonports.co.th/hptuat/api/linebot';
+const APEX_LOG_URL = 'https://uatonline.hutchisonports.co.th/hptuat/api/linebot/webhook';
 
 /* =====================================================
    LOGGER
@@ -68,12 +68,25 @@ function isFallback(result) {
 }
 
 /* =====================================================
+   LOG FALLBACK TO APEX
+   เรียกเมื่อ Dialogflow ตอบ fallback → บันทึก [FALLBACK]
+   ใช้ fire-and-forget ไม่รอผล
+===================================================== */
+function logFallbackToApex(userId, message) {
+  axios.post(
+    APEX_LOG_URL,
+    { user_id: userId, message, reply: '[FALLBACK]' },
+    { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
+  ).catch(() => {});
+}
+
+/* =====================================================
    DETECT SEARCH TYPE
 ===================================================== */
 function detectSearchType(text) {
   const upper = text.toUpperCase().trim();
 
-  // Container: 4 ตัวอักษร + 7 ตัวเลข
+  // Container: 4 ตัวอักษร + 7 ตัวเลข (รองรับช่องว่าง เช่น "MAGU 2154885")
   const containerMatch = upper.match(/\b([A-Z]{4}\s*[0-9]{6}\s*[0-9])\b/);
   if (containerMatch) {
     const clean = containerMatch[1].replace(/\s+/g, '');
@@ -96,10 +109,8 @@ function detectSearchType(text) {
   const bookingMatch = upper.match(/^([A-Z]{2,4}[0-9]{6,10})$/);
   if (bookingMatch) return { type: 'booking', value: bookingMatch[1] };
 
-  // Vessel: ถ้าข้อความเป็นตัวอังกฤษล้วน (+ ช่องว่าง ตัวเลข /)
-  // เช่น "NANHIRUN", "EVER BRAVE", "NP LOVEGISTICS 1", "RACHA BHUM"
-  // pattern: มีแต่ A-Z ช่องว่าง ตัวเลข และ / ความยาว 3+ ตัว
-  // ไม่มีภาษาไทยเลย → น่าจะเป็นชื่อเรือ
+  // Vessel: ข้อความเป็นตัวอังกฤษล้วน (+ ช่องว่าง ตัวเลข /)
+  // เช่น "NANHIRUN", "EVER BRAVE", "NP LOVEGISTICS 1"
   if (/^[A-Z0-9 /]{3,}$/.test(upper) && /[A-Z]{2,}/.test(upper)) {
     return { type: 'vessel', value: text.trim() };
   }
@@ -176,14 +187,13 @@ app.post('/webhook', async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // กดปุ่ม "Cost Estimate" จาก Rich Menu → เปลี่ยนเป็นแสดง Survey
-      // action=cost มาจาก Rich Menu เดิม ไม่มี refId
+      // กดปุ่ม "Cost Estimate" จาก Rich Menu → แสดง Survey แทน
       if (action === 'cost') {
         await replyFlex(event.replyToken, 'ประเมินความพอใจ', buildSurveyFlex(''));
         return res.sendStatus(200);
       }
 
-      // กดปุ่ม "ประเมินความพอใจ" จาก Card → มี refId (หมายเลขตู้ / booking)
+      // กดปุ่ม "ประเมินความพอใจ" จาก Card → มี refId
       if (action === 'survey') {
         const refId = params.get("ref") || '';
         await replyFlex(event.replyToken, 'ประเมินความพอใจ', buildSurveyFlex(refId));
@@ -278,7 +288,13 @@ app.post('/webhook', async (req, res) => {
       "project-chatbot-faqs-hpqt", authFAQ,
       originalText, sessionId, "th"
     );
-    const faqAnswer = faqResult.fulfillmentText || "ไม่พบข้อมูลที่เกี่ยวข้อง";
+
+    const faqAnswer     = faqResult.fulfillmentText || "ไม่พบข้อมูลที่เกี่ยวข้อง";
+    const isFaqFallback = isFallback(faqResult) || !faqResult.fulfillmentText;
+
+    // ถ้า fallback → log [FALLBACK] ทับ [DIALOGFLOW] ที่ Cloudflare บันทึกไว้แล้ว
+    if (isFaqFallback) logFallbackToApex(sessionId, originalText);
+
     await replyText(event.replyToken, faqAnswer);
     return res.sendStatus(200);
 
