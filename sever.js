@@ -242,6 +242,7 @@ app.post('/webhook', async (req, res) => {
       const data = await fetchApex(`container/${encodeURIComponent(search.value)}`);
       const item = getFirstItem(data);
       if (!item) {
+        logFallbackToApex(sessionId, `[NOT FOUND: container] ${search.value}`);
         await replyText(event.replyToken, `ไม่พบข้อมูลตู้ ${search.value} ในระบบ`);
       } else {
         await replyFlex(event.replyToken, `Container: ${search.value}`, buildContainerFlex(item));
@@ -254,6 +255,7 @@ app.post('/webhook', async (req, res) => {
       const data = await fetchApex(`booking/${encodeURIComponent(search.value)}`);
       const item = getFirstItem(data);
       if (!item) {
+        logFallbackToApex(sessionId, `[NOT FOUND: booking] ${search.value}`);
         await replyText(event.replyToken, `ไม่พบข้อมูล Booking ${search.value} ในระบบ`);
       } else {
         await replyFlex(event.replyToken, `Booking: ${search.value}`, buildBookingFlex(item));
@@ -266,6 +268,7 @@ app.post('/webhook', async (req, res) => {
       const data = await fetchApex(`vessel/${encodeURIComponent(search.value)}`);
       const item = getFirstItem(data);
       if (!item) {
+        logFallbackToApex(sessionId, `[NOT FOUND: vessel] ${search.value}`);
         await replyText(event.replyToken, `ไม่พบข้อมูลเรือ "${search.value}" ในระบบ`);
       } else {
         await replyFlex(event.replyToken, `Vessel: ${search.value}`, buildVesselFlex(item));
